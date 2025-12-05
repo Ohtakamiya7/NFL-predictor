@@ -3,4 +3,4 @@ numpy>=1.23.0
 scikit-learn>=1.2.0
 gunicorn
 flask>=2.3.0
-nfl-data-py==4.5.2
+nfl-data-py
