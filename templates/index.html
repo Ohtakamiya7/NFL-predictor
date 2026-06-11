@@ -1,269 +1,430 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFL Game Predictor</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFL Game Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#0A0E0B;
+    --turf:#10160F;
+    --turf-2:#161E14;
+    --chalk:#F2F4EC;
+    --chalk-dim:#9AA396;
+    --chalk-faint:rgba(242,244,236,.10);
+    --gain:#FFC800;
+    --gain-dim:rgba(255,200,0,.16);
+    --line:rgba(242,244,236,.08);
+    --radius:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--night);color:var(--chalk);
+    font-family:'Barlow',sans-serif;font-size:15px;line-height:1.5;
+    background-image:radial-gradient(ellipse 70% 40% at 50% -5%,rgba(160,190,150,.07),transparent 70%);
+    background-repeat:no-repeat;
+  }
+  .display{font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.04em}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+  /* ===== Header ===== */
+  header{border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
+    background:rgba(10,14,11,.92);backdrop-filter:blur(10px)}
+  .topbar{display:flex;align-items:center;gap:20px;height:64px}
+  .wordmark{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+  .wordmark .title{font-size:24px;font-weight:700;line-height:1}
+  .wordmark .title em{font-style:normal;color:var(--gain)}
+  .wordmark .sub{font-size:12px;color:var(--chalk-dim);letter-spacing:.12em}
+  .model-strip{margin-left:auto;display:flex;gap:28px}
+  .model-stat{text-align:right}
+  .model-stat .v{font-size:15px;font-weight:600}
+  .model-stat .k{font-size:10.5px;color:var(--chalk-dim);text-transform:uppercase;letter-spacing:.14em}
+  @media(max-width:760px){.model-strip{display:none}}
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+  /* ===== Week tabs ===== */
+  .weekbar{border-bottom:1px solid var(--line)}
+  .weeks{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding:8px 0}
+  .weeks::-webkit-scrollbar{display:none}
+  .week{
+    flex:0 0 auto;padding:6px 14px;border-radius:6px;
+    font-family:'Barlow Condensed';font-weight:600;font-size:15px;letter-spacing:.06em;
+    color:var(--chalk-dim);background:transparent;border:1px solid transparent;cursor:pointer;
+    position:relative;
+  }
+  .week:hover:not(:disabled){color:var(--chalk);background:var(--turf-2)}
+  .week.active{color:var(--night);background:var(--gain);border-color:var(--gain)}
+  .week:focus-visible{outline:2px solid var(--gain);outline-offset:2px}
+  /* past weeks get a subtle dot indicator */
+  .week[data-status="past"]::after{
+    content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
+    width:3px;height:3px;border-radius:50%;background:var(--chalk-dim);
+  }
+  .week[data-status="past"].active::after{background:var(--night)}
+  /* empty/unknown weeks are visually muted, not clickable */
+  .week[data-status="empty"]{opacity:.25;cursor:not-allowed}
 
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 40px;
-            padding: 20px;
-        }
+  /* ===== Hero ===== */
+  .hero{padding:44px 0 36px;border-bottom:1px solid var(--line)}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--gain);margin-bottom:14px;
+  }
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gain)}
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:48px;align-items:end}
+  @media(max-width:880px){.hero-grid{grid-template-columns:1fr;gap:28px}}
+  .hero-matchup{font-size:clamp(40px,6vw,68px);font-weight:700;line-height:.95}
+  .hero-matchup .at{color:var(--chalk-dim);font-size:.5em;vertical-align:.35em;margin:0 .2em}
+  .hero-meta{margin-top:10px;color:var(--chalk-dim);font-size:14px}
+  .hero-meta .mono{color:var(--chalk)}
+  .hero-call{border-left:2px solid var(--gain);padding-left:18px}
+  .hero-call .pct{font-size:48px;font-weight:600;line-height:1;color:var(--gain)}
+  .hero-call .who{font-size:13px;color:var(--chalk-dim);margin-top:6px}
+  .hero-call .who b{color:var(--chalk)}
+  .hero-field{margin-top:28px}
 
-        .header h1 {
-            font-size: 3em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
+  /* ===== Slate sections ===== */
+  .slate{padding:34px 0 8px}
+  .slate-head{display:flex;align-items:baseline;gap:14px;margin-bottom:16px}
+  .slate-head h2{font-size:22px;font-weight:700;letter-spacing:.06em}
+  .slate-head .count{font-family:'IBM Plex Mono';font-size:11.5px;color:var(--chalk-dim)}
+  .slate-head .rule{flex:1;height:1px;background:var(--line)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;padding-bottom:26px}
 
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
+  /* ===== Game card ===== */
+  .card{
+    background:var(--turf);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 16px 14px;display:flex;flex-direction:column;gap:12px;
+    transition:border-color .15s ease,transform .15s ease;
+  }
+  .card:hover{border-color:rgba(255,200,0,.35);transform:translateY(-2px)}
+  .card-top{display:flex;justify-content:space-between;align-items:center}
+  .kick{font-family:'IBM Plex Mono';font-size:11px;color:var(--chalk-dim);letter-spacing:.04em}
+  .tier{
+    font-family:'Barlow Condensed';font-weight:600;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;
+    padding:2px 9px;border-radius:4px;border:1px solid var(--line);color:var(--chalk-dim);
+  }
+  .tier.lock{color:var(--night);background:var(--gain);border-color:var(--gain)}
+  .tier.solid{color:var(--gain);border-color:rgba(255,200,0,.4)}
+  .tier.lean{color:var(--chalk)}
+  .teams{display:flex;flex-direction:column;gap:7px}
+  .team{display:flex;align-items:center;gap:10px}
+  .swatch{width:4px;height:22px;border-radius:2px;flex:0 0 auto}
+  .abbr{font-family:'Barlow Condensed';font-weight:700;font-size:20px;letter-spacing:.05em;width:52px}
+  .tname{font-size:13px;color:var(--chalk-dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prob{font-family:'IBM Plex Mono';font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+  .team.fav .prob{color:var(--gain)}
+  .team.dog .abbr,.team.dog .prob{color:var(--chalk-dim)}
 
-        .error {
-            background: #ff6b6b;
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            text-align: center;
-            font-size: 1.1em;
-        }
+  /* ===== Probability field ===== */
+  .field{
+    position:relative;height:34px;border-radius:6px;overflow:hidden;
+    background:
+      repeating-linear-gradient(90deg,var(--chalk-faint) 0 1px,transparent 1px 10%),
+      linear-gradient(180deg,#18220F,#121A0C);
+    border:1px solid var(--line);
+  }
+  .field .fill{
+    position:absolute;inset:0;right:auto;
+    background:linear-gradient(90deg,rgba(255,255,255,.05),var(--team-c,#555));
+    opacity:.85;
+  }
+  .field .gainline{
+    position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--gain);
+    box-shadow:0 0 8px rgba(255,200,0,.8);
+  }
+  .field .tag{
+    position:absolute;top:50%;transform:translateY(-50%);
+    font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);
+    text-shadow:0 1px 2px rgba(0,0,0,.6);
+  }
+  .field .tag.left{left:8px}
+  .field .tag.right{right:8px;color:var(--chalk-dim)}
+  .field.lg{height:56px}
+  .field.lg .tag{font-size:12px}
 
-        .info-bar {
-            background: white;
-            padding: 15px 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+  .pick{display:flex;justify-content:space-between;align-items:baseline}
+  .pick .label{font-size:12px;color:var(--chalk-dim);text-transform:uppercase;letter-spacing:.1em;
+    font-family:'Barlow Condensed';font-weight:600}
+  .pick .value{font-family:'IBM Plex Mono';font-size:12px}
+  .pick .value b{color:var(--gain);font-weight:600}
 
-        .info-bar span {
-            color: #666;
-        }
+  /* ===== Result row (completed games) ===== */
+  .result{
+    display:flex;justify-content:space-between;align-items:center;
+    border-top:1px solid var(--line);padding-top:11px;
+  }
+  .result .score{font-family:'IBM Plex Mono';font-size:12px;color:var(--chalk)}
+  .result .badge{
+    font-family:'Barlow Condensed';font-weight:700;font-size:12px;letter-spacing:.1em;
+    text-transform:uppercase;padding:2px 9px;border-radius:4px;
+  }
+  .badge.correct{color:#4ade80;background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.28)}
+  .badge.wrong{color:#f87171;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.28)}
 
-        .retrain-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9em;
-            transition: background 0.3s;
-        }
+  /* ===== States ===== */
+  .notice{
+    background:rgba(255,59,59,.1);border:1px solid rgba(255,59,59,.25);
+    color:#ff8080;padding:12px 18px;border-radius:var(--radius);
+    font-size:13.5px;margin-top:24px;
+  }
+  .loading-state,.no-games{
+    padding:60px 0;text-align:center;color:var(--chalk-dim);font-size:15px;
+  }
+  .loading-state{font-family:'IBM Plex Mono';font-size:13px;letter-spacing:.1em}
 
-        .retrain-btn:hover {
-            background: #5568d3;
-        }
+  footer{
+    border-top:1px solid var(--line);margin-top:30px;padding:22px 0 40px;
+    color:var(--chalk-dim);font-size:12.5px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  }
+  footer .mono{font-size:11.5px}
 
-        .games-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-        }
-
-        .game-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .game-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 24px rgba(0,0,0,0.3);
-        }
-
-        .game-date {
-            color: #999;
-            font-size: 0.9em;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .team {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 8px;
-            transition: all 0.3s;
-        }
-
-        .team.winner {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-weight: bold;
-            transform: scale(1.05);
-        }
-
-        .team.loser {
-            background: #f5f5f5;
-            color: #666;
-        }
-
-        .team-name {
-            font-size: 1.2em;
-            font-weight: 600;
-        }
-
-        .team-probability {
-            font-size: 1.1em;
-            font-weight: 600;
-        }
-
-        .vs-divider {
-            text-align: center;
-            color: #999;
-            margin: 10px 0;
-            font-weight: bold;
-        }
-
-        .prediction-summary {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #eee;
-            text-align: center;
-        }
-
-        .prediction-summary .winner-text {
-            font-size: 1.3em;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-
-        .prediction-summary .confidence {
-            color: #666;
-            font-size: 0.9em;
-        }
-
-        .confidence-bar {
-            width: 100%;
-            height: 8px;
-            background: #eee;
-            border-radius: 4px;
-            margin-top: 10px;
-            overflow: hidden;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            transition: width 0.5s;
-        }
-
-        .no-games {
-            background: white;
-            padding: 60px;
-            border-radius: 15px;
-            text-align: center;
-            color: #666;
-            font-size: 1.2em;
-        }
-
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2em;
-            }
-
-            .games-container {
-                grid-template-columns: 1fr;
-            }
-
-            .info-bar {
-                flex-direction: column;
-                gap: 10px;
-            }
-        }
-    </style>
+  @media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}html{scroll-behavior:auto}}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>NFL Game Predictor</h1>
-            <p>AI-Powered Predictions for Upcoming Games</p>
-        </div>
 
-        {% if error %}
-        <div class="error">
-            {{ error }}
-        </div>
-        {% endif %}
-
-        <div class="info-bar">
-            <span>Last Updated: {{ last_updated }}</span>
-        </div>
-
-        {% if predictions %}
-        <div class="games-container">
-            {% for game in predictions %}
-            <div class="game-card">
-                {% if game.game_date and game.game_date != 'TBD' %}
-                <div class="game-date">{{ game.game_date }}</div>
-                {% else %}
-                <div class="game-date">Date: TBD</div>
-                {% endif %}
-                
-                <div class="team {% if game.predicted_winner == game.home_team %}winner{% else %}loser{% endif %}">
-                    <span class="team-name">{{ game.home_team }}</span>
-                    <span class="team-probability">{{ "%.1f"|format(game.home_win_prob * 100) }}%</span>
-                </div>
-
-                <div class="vs-divider">VS</div>
-
-                <div class="team {% if game.predicted_winner == game.away_team %}winner{% else %}loser{% endif %}">
-                    <span class="team-name">{{ game.away_team }}</span>
-                    <span class="team-probability">{{ "%.1f"|format(game.away_win_prob * 100) }}%</span>
-                </div>
-
-                <div class="prediction-summary">
-                    <div class="winner-text">🏆 Predicted Winner: {{ game.predicted_winner }}</div>
-                    <div class="confidence">
-                        Confidence: {{ "%.1f"|format(game.confidence * 100) }}%
-                    </div>
-                    <div class="confidence-bar">
-                        <div class="confidence-fill" style="width: {{ (game.confidence * 100)|round(1) }}%"></div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="no-games">
-            {% if not error %}
-            <p>No upcoming games found. The season may have ended or no games are scheduled for the next week.</p>
-            {% endif %}
-        </div>
-        {% endif %}
+<header>
+  <div class="wrap topbar">
+    <div class="wordmark display">
+      <span class="title">NFL <em>Game</em> Predictor</span>
+      <span class="sub">2026 SEASON</span>
     </div>
+    <div class="model-strip">
+      <div class="model-stat">
+        <div class="v mono">{% if model_accuracy %}{{ "%.1f"|format(model_accuracy) }}%{% else %}—{% endif %}</div>
+        <div class="k">Model accuracy</div>
+      </div>
+      <div class="model-stat">
+        <div class="v mono">{% if games_trained %}{{ games_trained }}{% else %}—{% endif %}</div>
+        <div class="k">Games trained</div>
+      </div>
+      <div class="model-stat">
+        <div class="v mono">{{ last_updated }}</div>
+        <div class="k">Last updated</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="weekbar"><div class="wrap"><div class="weeks" id="weeks"></div></div></div>
+
+<main class="wrap">
+  {% if error %}<div class="notice">{{ error }}</div>{% endif %}
+  <section class="hero" id="hero"></section>
+  <div id="slates"></div>
+</main>
+
+<footer class="wrap">
+  <span>Win probabilities are model output, not betting advice. Predictions refresh nightly after injury reports.</span>
+  <span class="mono">scikit-learn · logistic ensemble · v2.4</span>
+</footer>
+
+<script>
+const TEAMS = {
+  ARI:["Arizona Cardinals","#97233F"],  ATL:["Atlanta Falcons","#A71930"],
+  BAL:["Baltimore Ravens","#241773"],   BUF:["Buffalo Bills","#00338D"],
+  CAR:["Carolina Panthers","#0085CA"], CHI:["Chicago Bears","#C83803"],
+  CIN:["Cincinnati Bengals","#FB4F14"], CLE:["Cleveland Browns","#FF3C00"],
+  DAL:["Dallas Cowboys","#003594"],    DEN:["Denver Broncos","#FB4F14"],
+  DET:["Detroit Lions","#0076B6"],     GB:["Green Bay Packers","#203731"],
+  HOU:["Houston Texans","#03202F"],    IND:["Indianapolis Colts","#002C5F"],
+  JAX:["Jacksonville Jaguars","#006778"], KC:["Kansas City Chiefs","#E31837"],
+  LV:["Las Vegas Raiders","#5b5f63"],  LAC:["Los Angeles Chargers","#0080C6"],
+  LA:["Los Angeles Rams","#003594"],   LAR:["Los Angeles Rams","#003594"],
+  MIA:["Miami Dolphins","#008E97"],    MIN:["Minnesota Vikings","#4F2683"],
+  NE:["New England Patriots","#002244"], NO:["New Orleans Saints","#D3BC8D"],
+  NYG:["New York Giants","#0B2265"],   NYJ:["New York Jets","#125740"],
+  PHI:["Philadelphia Eagles","#004C54"], PIT:["Pittsburgh Steelers","#FFB612"],
+  SF:["San Francisco 49ers","#AA0000"], SEA:["Seattle Seahawks","#69BE28"],
+  TB:["Tampa Bay Buccaneers","#D50A0A"], TEN:["Tennessee Titans","#4B92DB"],
+  WAS:["Washington Commanders","#5A1414"], WSH:["Washington Commanders","#5A1414"]
+};
+function getTeam(a){ return TEAMS[a] || [a, "#888888"]; }
+
+// Injected server-side
+const INIT_SLATES   = {{ slates | tojson }};
+const INIT_LABEL    = {{ week_label | tojson }};
+const WEEK_META     = {{ week_meta | tojson }};   // [{week:1,status:'past'}, ...]
+const ACTIVE_WEEK   = {{ active_week }};
+
+// Client-side cache: pre-seed with the server-rendered current week
+const _weekCache = {};
+_weekCache[ACTIVE_WEEK] = { slates: INIT_SLATES, week_label: INIT_LABEL };
+
+// ---------------------------------------------------------------------------
+// Render helpers
+// ---------------------------------------------------------------------------
+
+function tier(p){
+  if(p>=78) return["lock","Lock"];
+  if(p>=65) return["solid","Solid"];
+  if(p>=55) return["lean","Lean"];
+  return["lean","Toss-up"];
+}
+
+function fieldHTML(away, home, homeProb, large=false){
+  const homeFav = homeProb >= 50;
+  const fav     = homeFav ? home : away;
+  const favProb = homeFav ? homeProb : 100 - homeProb;
+  const c = getTeam(fav)[1];
+  return `<div class="field ${large?"lg":""}" role="img"
+               aria-label="${fav} win probability ${favProb.toFixed(1)} percent">
+    <div class="fill" style="width:${favProb}%;--team-c:${c}"></div>
+    <div class="gainline" style="left:${favProb}%"></div>
+    <span class="tag left">${fav} ${favProb.toFixed(1)}%</span>
+    <span class="tag right">${homeFav?away:home} ${(100-favProb).toFixed(1)}%</span>
+  </div>`;
+}
+
+function cardHTML(g){
+  const homeFav = g.homeProb >= 50;
+  const fav     = homeFav ? g.home : g.away;
+  const favProb = homeFav ? g.homeProb : 100 - g.homeProb;
+  const [tc,tl] = tier(favProb);
+
+  const row = (abbr, prob, isFav, isHome) =>
+    `<div class="team ${isFav?"fav":"dog"}">
+      <span class="swatch" style="background:${getTeam(abbr)[1]}"></span>
+      <span class="abbr display">${abbr}</span>
+      <span class="tname">${getTeam(abbr)[0]}${isHome?" · Home":""}</span>
+      <span class="prob">${prob.toFixed(1)}%</span>
+    </div>`;
+
+  let resultHTML = "";
+  if(g.completed && g.homeScore != null && g.awayScore != null){
+    const actualWinner = g.homeScore > g.awayScore ? g.home : g.away;
+    const correct = actualWinner === fav;
+    resultHTML = `<div class="result">
+      <span class="score">Final · ${g.home} ${g.homeScore} · ${g.away} ${g.awayScore}</span>
+      <span class="badge ${correct?"correct":"wrong"}">${correct?"✓ Correct":"✗ Wrong"}</span>
+    </div>`;
+  }
+
+  return `<article class="card">
+    <div class="card-top">
+      <span class="kick">${g.kick} ET</span>
+      <span class="tier ${tc}">${tl}</span>
+    </div>
+    <div class="teams">
+      ${row(g.away, 100-g.homeProb, !homeFav, false)}
+      ${row(g.home, g.homeProb, homeFav, true)}
+    </div>
+    ${fieldHTML(g.away, g.home, g.homeProb)}
+    <div class="pick">
+      <span class="label">Model pick</span>
+      <span class="value"><b>${fav}</b> · ${favProb.toFixed(1)}% win prob</span>
+    </div>
+    ${resultHTML}
+  </article>`;
+}
+
+// ---------------------------------------------------------------------------
+// Page rendering
+// ---------------------------------------------------------------------------
+
+function renderHero(slates, weekLabel){
+  const el  = document.getElementById("hero");
+  const all = slates.flatMap(s => s.games);
+  if(!all.length){ el.innerHTML = `<div class="no-games">No games available for ${weekLabel}.</div>`; return; }
+
+  const lock     = all.reduce((a,b) => Math.max(b.homeProb,100-b.homeProb) > Math.max(a.homeProb,100-a.homeProb) ? b : a);
+  const homeFav  = lock.homeProb >= 50;
+  const lFav     = homeFav ? lock.home : lock.away;
+  const lFavProb = homeFav ? lock.homeProb : 100 - lock.homeProb;
+
+  el.innerHTML = `
+    <div class="eyebrow">Lock of the Week · ${weekLabel}</div>
+    <div class="hero-grid">
+      <div>
+        <h1 class="hero-matchup display">${lock.away}<span class="at">at</span>${lock.home}</h1>
+        <p class="hero-meta">${lock.kick} ET · <span class="mono">${getTeam(lock.away)[0]} at ${getTeam(lock.home)[0]}</span></p>
+      </div>
+      <div class="hero-call">
+        <div class="pct mono">${lFavProb.toFixed(1)}%</div>
+        <div class="who">Model picks <b>${getTeam(lFav)[0]}</b> — the most confident call on this week's slate.</div>
+      </div>
+    </div>
+    <div class="hero-field">${fieldHTML(lock.away, lock.home, lock.homeProb, true)}</div>`;
+}
+
+function renderSlates(slates){
+  document.getElementById("slates").innerHTML = slates.map(s => `
+    <section class="slate">
+      <div class="slate-head">
+        <h2 class="display">${s.label}</h2>
+        <span class="count">${s.games.length} ${s.games.length===1?"game":"games"}</span>
+        <span class="rule"></span>
+      </div>
+      <div class="grid">${s.games.map(cardHTML).join("")}</div>
+    </section>`).join("");
+}
+
+function renderPage(slates, weekLabel){
+  renderHero(slates, weekLabel);
+  renderSlates(slates);
+}
+
+// ---------------------------------------------------------------------------
+// Week tabs
+// ---------------------------------------------------------------------------
+
+const weeksEl = document.getElementById("weeks");
+
+if(WEEK_META.length > 0){
+  WEEK_META.forEach(({week, status}) => {
+    const b = document.createElement("button");
+    b.className = "week" + (week === ACTIVE_WEEK ? " active" : "");
+    b.dataset.status = status;
+    b.textContent = "Week " + week;
+    b.disabled = status === "empty";
+
+    b.onclick = async () => {
+      if(b.disabled) return;
+      document.querySelectorAll(".week").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+
+      // Serve from cache if available
+      if(_weekCache[week]){
+        renderPage(_weekCache[week].slates, _weekCache[week].week_label);
+        return;
+      }
+
+      // Loading state
+      document.getElementById("hero").innerHTML = `<div class="loading-state">Loading Week ${week}…</div>`;
+      document.getElementById("slates").innerHTML = "";
+
+      try {
+        const resp = await fetch(`/api/week/${week}`);
+        const data = await resp.json();
+        if(data.error){
+          document.getElementById("hero").innerHTML = `<div class="no-games">${data.error}</div>`;
+          return;
+        }
+        _weekCache[week] = data;
+        renderPage(data.slates, data.week_label);
+      } catch(e) {
+        document.getElementById("hero").innerHTML = `<div class="no-games">Failed to load week data.</div>`;
+      }
+    };
+    weeksEl.appendChild(b);
+  });
+} else {
+  // Fallback: static 1-18 tabs with no functionality
+  for(let w=1; w<=18; w++){
+    const b = document.createElement("button");
+    b.className = "week" + (w===1?" active":"");
+    b.textContent = "Week " + w;
+    weeksEl.appendChild(b);
+  }
+}
+
+// Initial render from server data
+renderPage(INIT_SLATES, INIT_LABEL);
+</script>
 </body>
 </html>
-

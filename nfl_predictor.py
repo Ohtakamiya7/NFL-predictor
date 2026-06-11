@@ -316,8 +316,8 @@ def train_model(completed_games_df, date_col, window_size=16):
     # Evaluate
     train_accuracy = model.score(X, y)
     print(f"Model accuracy: {train_accuracy:.3f}")
-    
-    return model, feature_columns
+
+    return model, feature_columns, float(train_accuracy), len(X)
 
 def predict_upcoming_games(model, feature_columns, upcoming_games_df, completed_games_df, date_col, window_size=16):
     """Make predictions for upcoming games."""
@@ -340,21 +340,25 @@ def predict_upcoming_games(model, feature_columns, upcoming_games_df, completed_
                 'home_team': game['home_team'],
                 'away_team': game['away_team'],
                 'game_date': game.get(date_col, ''),
+                'gametime': game.get('gametime', ''),
+                'week': game.get('week', None),
                 'predicted_winner': predicted_winner,
                 'home_win_probability': home_win_prob,
                 'away_win_probability': 1 - home_win_prob,
-                'confidence': abs(home_win_prob - 0.5) * 2  # 0 to 1 scale
+                'confidence': abs(home_win_prob - 0.5) * 2
             })
         except Exception as e:
             print(f"Error predicting game {game.get('game_id', 'unknown')}: {e}")
     
     return pd.DataFrame(predictions)
 
-def save_model(model, feature_columns, filepath='nfl_model.pkl'):
+def save_model(model, feature_columns, filepath='nfl_model.pkl', accuracy=None, games_count=None):
     """Save trained model and feature columns."""
     model_data = {
         'model': model,
-        'feature_columns': feature_columns
+        'feature_columns': feature_columns,
+        'accuracy': accuracy,
+        'games_count': games_count,
     }
     with open(filepath, 'wb') as f:
         pickle.dump(model_data, f)
@@ -364,5 +368,10 @@ def load_model(filepath='nfl_model.pkl'):
     """Load trained model and feature columns."""
     with open(filepath, 'rb') as f:
         model_data = pickle.load(f)
-    return model_data['model'], model_data['feature_columns']
+    return (
+        model_data['model'],
+        model_data['feature_columns'],
+        model_data.get('accuracy'),
+        model_data.get('games_count'),
+    )
 
