@@ -20,47 +20,75 @@ try:
 except ImportError:
     NFL_DATA_PY_AVAILABLE = False
 
-def get_team_stats_from_history(team, games_df, date_col, current_date, window_size=16):
-    """Calculate team statistics from historical games up to a given date."""
-    if date_col and date_col in games_df.columns:
-        team_games = games_df[
-            (games_df[date_col] < current_date) & 
-            ((games_df['home_team'] == team) | (games_df['away_team'] == team))
-        ].tail(window_size)
-    else:
-        # If no date column, just get all games for the team
-        team_games = games_df[
-            (games_df['home_team'] == team) | (games_df['away_team'] == team)
-        ].tail(window_size)
-    
+# How quickly the current season takes over from last season. The current
+# season's weight is n / (n + PRIOR_SEASON_GAMES), where n is games played this
+# season: 1 game -> 20%, 4 games -> 50%, 10 games -> ~71%, 17 games -> ~81%.
+PRIOR_SEASON_GAMES = 4
+
+LEAGUE_AVERAGE = {'avg_points_scored': 21.0, 'avg_points_allowed': 21.0, 'win_rate': 0.5}
+
+
+def infer_season(game_date):
+    """NFL season a date belongs to (Jan/Feb playoff games belong to the prior year)."""
+    game_date = pd.to_datetime(game_date)
+    return game_date.year - 1 if game_date.month <= 2 else game_date.year
+
+
+def _summarize_games(team, team_games):
+    """Average points scored/allowed and win rate over team_games, or None if empty."""
     points_scored = []
     points_allowed = []
     wins = 0
-    games_count = 0
-    
     for _, game in team_games.iterrows():
         if game['home_team'] == team:
             points_scored.append(game['home_score'])
             points_allowed.append(game['away_score'])
             wins += game['home_win']
-            games_count += 1
-        elif game['away_team'] == team:
+        else:
             points_scored.append(game['away_score'])
             points_allowed.append(game['home_score'])
             wins += (1 - game['home_win'])
-            games_count += 1
-    
-    avg_scored = np.mean(points_scored) if points_scored else 21.0
-    avg_allowed = np.mean(points_allowed) if points_allowed else 21.0
-    win_rate = wins / games_count if games_count > 0 else 0.5
-    point_diff = avg_scored - avg_allowed
-    
+    if not points_scored:
+        return None
     return {
-        'avg_points_scored': avg_scored,
-        'avg_points_allowed': avg_allowed,
-        'win_rate': win_rate,
-        'point_differential': point_diff
+        'avg_points_scored': float(np.mean(points_scored)),
+        'avg_points_allowed': float(np.mean(points_allowed)),
+        'win_rate': wins / len(points_scored),
     }
+
+
+def get_team_stats_from_history(team, games_df, date_col, current_date, window_size=16, season=None):
+    """Calculate team statistics from games played before current_date.
+
+    Stats are season-aware: this season's games are blended with the team's
+    previous season, and this season's weight grows with every game played
+    (see PRIOR_SEASON_GAMES), so last year's results fade out as the season goes on.
+    window_size is only used when the data has no 'season' column.
+    """
+    team_mask = (games_df['home_team'] == team) | (games_df['away_team'] == team)
+    if date_col and date_col in games_df.columns:
+        team_games = games_df[team_mask & (games_df[date_col] < current_date)]
+    else:
+        team_games = games_df[team_mask]
+
+    if 'season' in team_games.columns:
+        if season is None or pd.isna(season):
+            season = infer_season(current_date)
+        this_season = team_games[team_games['season'] == season]
+        earlier = team_games[team_games['season'] < season]
+        prior_season = earlier[earlier['season'] == earlier['season'].max()]
+    else:
+        this_season = team_games.tail(window_size)
+        prior_season = team_games.iloc[:0]
+
+    previous = _summarize_games(team, prior_season) or LEAGUE_AVERAGE
+    current = _summarize_games(team, this_season) or previous
+
+    n = len(this_season)
+    weight = n / (n + PRIOR_SEASON_GAMES)
+    stats = {key: weight * current[key] + (1 - weight) * previous[key] for key in LEAGUE_AVERAGE}
+    stats['point_differential'] = stats['avg_points_scored'] - stats['avg_points_allowed']
+    return stats
 
 def calculate_features_for_game(game, completed_games_df, date_col, window_size=16):
     """Calculate features for a single game based on historical data."""
@@ -74,8 +102,9 @@ def calculate_features_for_game(game, completed_games_df, date_col, window_size=
         game_date = datetime.now()
     
     # Get stats for both teams
-    home_stats = get_team_stats_from_history(home_team, completed_games_df, date_col, game_date, window_size)
-    away_stats = get_team_stats_from_history(away_team, completed_games_df, date_col, game_date, window_size)
+    season = game.get('season')
+    home_stats = get_team_stats_from_history(home_team, completed_games_df, date_col, game_date, window_size, season)
+    away_stats = get_team_stats_from_history(away_team, completed_games_df, date_col, game_date, window_size, season)
     
     # Create feature dictionary
     features = {
@@ -114,8 +143,10 @@ def load_historical_games(seasons=None):
             season_games = nfl.import_schedules([season])
             if len(season_games) > 0:
                 all_games.append(season_games)
-        except:
-            pass
+            else:
+                print(f"Warning: no schedule data for season {season}")
+        except Exception as e:
+            print(f"Warning: could not load season {season}: {e}")
     
     if not all_games:
         raise ValueError("Could not load any game data")
