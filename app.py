@@ -17,9 +17,16 @@ from nfl_predictor import (
     load_model,
     save_model,
 )
+from matchup import build_matchup
+from teams import TEAMS, team_info, matchup_colors
 
 app = Flask(__name__)
 MODEL_FILE = 'nfl_model.pkl'
+
+
+@app.context_processor
+def _inject_teams():
+    return {'teams': TEAMS, 'team_info': team_info}
 
 # ---------------------------------------------------------------------------
 # Simple in-process cache to avoid re-loading large dataframes on every request
@@ -140,6 +147,7 @@ def _predictions_for_games(model, feature_cols, games_df, completed_games, date_
             game_date_dt = raw.to_pydatetime() if hasattr(raw, 'to_pydatetime') else raw
 
         formatted.append({
+            'game_id': str(pred.get('game_id') or ''),
             'away_team': str(pred['away_team']),
             'home_team': str(pred['home_team']),
             'home_win_prob': float(pred['home_win_probability']),
@@ -169,6 +177,7 @@ def _build_slates(predictions):
         label = _slate_label(label_dt)
         kick = _format_kickoff(dt, gametime)
         buckets.setdefault(label, []).append({
+            'id': pred.get('game_id', ''),
             'away': pred['away_team'],
             'home': pred['home_team'],
             'homeProb': round(pred['home_win_prob'] * 100, 1),
@@ -305,6 +314,32 @@ def week_api(week_num):
         return jsonify({'slates': slates, 'week_label': f'Week {week_num}'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/matchup/<game_id>')
+def matchup(game_id):
+    try:
+        model, feature_cols, _, _, completed_games, date_col, upcoming_games, upcoming_date_col = _load_all_data()
+        use_date_col = date_col or upcoming_date_col
+
+        game = upcoming_games[upcoming_games['game_id'] == game_id] if not upcoming_games.empty else upcoming_games
+        if game.empty:
+            game = completed_games[completed_games['game_id'] == game_id]
+        if game.empty:
+            return render_template('matchup.html', m=None, error=f"Game {game_id} not found."), 404
+
+        preds = predict_upcoming_games(model, feature_cols, game, completed_games, use_date_col)
+        if preds.empty:
+            raise RuntimeError("Could not compute a prediction for this game.")
+        game_row = game.iloc[0]
+        m = build_matchup(game_row, completed_games, use_date_col, preds.iloc[0]['home_win_probability'])
+
+        game_dt = pd.to_datetime(game_row[use_date_col]).to_pydatetime()
+        m['away_color'], m['home_color'] = matchup_colors(m['away']['team'], m['home']['team'])
+        m['kick'] = _format_kickoff(game_dt, str(game_row.get('gametime') or ''))
+        return render_template('matchup.html', m=m, error=None)
+    except Exception as e:
+        return render_template('matchup.html', m=None, error=f"Error loading matchup: {e}"), 500
 
 
 @app.route('/retrain')

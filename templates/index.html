@@ -6,185 +6,7 @@
 <title>NFL Game Predictor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --night:#0A0E0B;
-    --turf:#10160F;
-    --turf-2:#161E14;
-    --chalk:#F2F4EC;
-    --chalk-dim:#9AA396;
-    --chalk-faint:rgba(242,244,236,.10);
-    --gain:#FFC800;
-    --gain-dim:rgba(255,200,0,.16);
-    --line:rgba(242,244,236,.08);
-    --radius:10px;
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    background:var(--night);color:var(--chalk);
-    font-family:'Barlow',sans-serif;font-size:15px;line-height:1.5;
-    background-image:radial-gradient(ellipse 70% 40% at 50% -5%,rgba(160,190,150,.07),transparent 70%);
-    background-repeat:no-repeat;
-  }
-  .display{font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.04em}
-  .mono{font-family:'IBM Plex Mono',monospace}
-  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
-
-  /* ===== Header ===== */
-  header{border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
-    background:rgba(10,14,11,.92);backdrop-filter:blur(10px)}
-  .topbar{display:flex;align-items:center;gap:20px;height:64px}
-  .wordmark{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
-  .wordmark .title{font-size:24px;font-weight:700;line-height:1}
-  .wordmark .title em{font-style:normal;color:var(--gain)}
-  .wordmark .sub{font-size:12px;color:var(--chalk-dim);letter-spacing:.12em}
-  .model-strip{margin-left:auto;display:flex;gap:28px}
-  .model-stat{text-align:right}
-  .model-stat .v{font-size:15px;font-weight:600}
-  .model-stat .k{font-size:10.5px;color:var(--chalk-dim);text-transform:uppercase;letter-spacing:.14em}
-  @media(max-width:760px){.model-strip{display:none}}
-
-  /* ===== Week tabs ===== */
-  .weekbar{border-bottom:1px solid var(--line)}
-  .weeks{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding:8px 0}
-  .weeks::-webkit-scrollbar{display:none}
-  .week{
-    flex:0 0 auto;padding:6px 14px;border-radius:6px;
-    font-family:'Barlow Condensed';font-weight:600;font-size:15px;letter-spacing:.06em;
-    color:var(--chalk-dim);background:transparent;border:1px solid transparent;cursor:pointer;
-    position:relative;
-  }
-  .week:hover:not(:disabled){color:var(--chalk);background:var(--turf-2)}
-  .week.active{color:var(--night);background:var(--gain);border-color:var(--gain)}
-  .week:focus-visible{outline:2px solid var(--gain);outline-offset:2px}
-  /* past weeks get a subtle dot indicator */
-  .week[data-status="past"]::after{
-    content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
-    width:3px;height:3px;border-radius:50%;background:var(--chalk-dim);
-  }
-  .week[data-status="past"].active::after{background:var(--night)}
-  /* empty/unknown weeks are visually muted, not clickable */
-  .week[data-status="empty"]{opacity:.25;cursor:not-allowed}
-
-  /* ===== Hero ===== */
-  .hero{padding:44px 0 36px;border-bottom:1px solid var(--line)}
-  .eyebrow{
-    display:inline-flex;align-items:center;gap:8px;
-    font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.22em;text-transform:uppercase;
-    color:var(--gain);margin-bottom:14px;
-  }
-  .eyebrow::before{content:"";width:26px;height:1px;background:var(--gain)}
-  .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:48px;align-items:end}
-  @media(max-width:880px){.hero-grid{grid-template-columns:1fr;gap:28px}}
-  .hero-matchup{font-size:clamp(40px,6vw,68px);font-weight:700;line-height:.95}
-  .hero-matchup .at{color:var(--chalk-dim);font-size:.5em;vertical-align:.35em;margin:0 .2em}
-  .hero-meta{margin-top:10px;color:var(--chalk-dim);font-size:14px}
-  .hero-meta .mono{color:var(--chalk)}
-  .hero-call{border-left:2px solid var(--gain);padding-left:18px}
-  .hero-call .pct{font-size:48px;font-weight:600;line-height:1;color:var(--gain)}
-  .hero-call .who{font-size:13px;color:var(--chalk-dim);margin-top:6px}
-  .hero-call .who b{color:var(--chalk)}
-  .hero-field{margin-top:28px}
-
-  /* ===== Slate sections ===== */
-  .slate{padding:34px 0 8px}
-  .slate-head{display:flex;align-items:baseline;gap:14px;margin-bottom:16px}
-  .slate-head h2{font-size:22px;font-weight:700;letter-spacing:.06em}
-  .slate-head .count{font-family:'IBM Plex Mono';font-size:11.5px;color:var(--chalk-dim)}
-  .slate-head .rule{flex:1;height:1px;background:var(--line)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;padding-bottom:26px}
-
-  /* ===== Game card ===== */
-  .card{
-    background:var(--turf);border:1px solid var(--line);border-radius:var(--radius);
-    padding:16px 16px 14px;display:flex;flex-direction:column;gap:12px;
-    transition:border-color .15s ease,transform .15s ease;
-  }
-  .card:hover{border-color:rgba(255,200,0,.35);transform:translateY(-2px)}
-  .card-top{display:flex;justify-content:space-between;align-items:center}
-  .kick{font-family:'IBM Plex Mono';font-size:11px;color:var(--chalk-dim);letter-spacing:.04em}
-  .tier{
-    font-family:'Barlow Condensed';font-weight:600;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;
-    padding:2px 9px;border-radius:4px;border:1px solid var(--line);color:var(--chalk-dim);
-  }
-  .tier.lock{color:var(--night);background:var(--gain);border-color:var(--gain)}
-  .tier.solid{color:var(--gain);border-color:rgba(255,200,0,.4)}
-  .tier.lean{color:var(--chalk)}
-  .teams{display:flex;flex-direction:column;gap:7px}
-  .team{display:flex;align-items:center;gap:10px}
-  .swatch{width:4px;height:22px;border-radius:2px;flex:0 0 auto}
-  .abbr{font-family:'Barlow Condensed';font-weight:700;font-size:20px;letter-spacing:.05em;width:52px}
-  .tname{font-size:13px;color:var(--chalk-dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .prob{font-family:'IBM Plex Mono';font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
-  .team.fav .prob{color:var(--gain)}
-  .team.dog .abbr,.team.dog .prob{color:var(--chalk-dim)}
-
-  /* ===== Probability field ===== */
-  .field{
-    position:relative;height:34px;border-radius:6px;overflow:hidden;
-    background:
-      repeating-linear-gradient(90deg,var(--chalk-faint) 0 1px,transparent 1px 10%),
-      linear-gradient(180deg,#18220F,#121A0C);
-    border:1px solid var(--line);
-  }
-  .field .fill{
-    position:absolute;inset:0;right:auto;
-    background:linear-gradient(90deg,rgba(255,255,255,.05),var(--team-c,#555));
-    opacity:.85;
-  }
-  .field .gainline{
-    position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--gain);
-    box-shadow:0 0 8px rgba(255,200,0,.8);
-  }
-  .field .tag{
-    position:absolute;top:50%;transform:translateY(-50%);
-    font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);
-    text-shadow:0 1px 2px rgba(0,0,0,.6);
-  }
-  .field .tag.left{left:8px}
-  .field .tag.right{right:8px;color:var(--chalk-dim)}
-  .field.lg{height:56px}
-  .field.lg .tag{font-size:12px}
-
-  .pick{display:flex;justify-content:space-between;align-items:baseline}
-  .pick .label{font-size:12px;color:var(--chalk-dim);text-transform:uppercase;letter-spacing:.1em;
-    font-family:'Barlow Condensed';font-weight:600}
-  .pick .value{font-family:'IBM Plex Mono';font-size:12px}
-  .pick .value b{color:var(--gain);font-weight:600}
-
-  /* ===== Result row (completed games) ===== */
-  .result{
-    display:flex;justify-content:space-between;align-items:center;
-    border-top:1px solid var(--line);padding-top:11px;
-  }
-  .result .score{font-family:'IBM Plex Mono';font-size:12px;color:var(--chalk)}
-  .result .badge{
-    font-family:'Barlow Condensed';font-weight:700;font-size:12px;letter-spacing:.1em;
-    text-transform:uppercase;padding:2px 9px;border-radius:4px;
-  }
-  .badge.correct{color:#4ade80;background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.28)}
-  .badge.wrong{color:#f87171;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.28)}
-
-  /* ===== States ===== */
-  .notice{
-    background:rgba(255,59,59,.1);border:1px solid rgba(255,59,59,.25);
-    color:#ff8080;padding:12px 18px;border-radius:var(--radius);
-    font-size:13.5px;margin-top:24px;
-  }
-  .loading-state,.no-games{
-    padding:60px 0;text-align:center;color:var(--chalk-dim);font-size:15px;
-  }
-  .loading-state{font-family:'IBM Plex Mono';font-size:13px;letter-spacing:.1em}
-
-  footer{
-    border-top:1px solid var(--line);margin-top:30px;padding:22px 0 40px;
-    color:var(--chalk-dim);font-size:12.5px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
-  }
-  footer .mono{font-size:11.5px}
-
-  @media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}html{scroll-behavior:auto}}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
@@ -225,25 +47,7 @@
 </footer>
 
 <script>
-const TEAMS = {
-  ARI:["Arizona Cardinals","#97233F"],  ATL:["Atlanta Falcons","#A71930"],
-  BAL:["Baltimore Ravens","#241773"],   BUF:["Buffalo Bills","#00338D"],
-  CAR:["Carolina Panthers","#0085CA"], CHI:["Chicago Bears","#C83803"],
-  CIN:["Cincinnati Bengals","#FB4F14"], CLE:["Cleveland Browns","#FF3C00"],
-  DAL:["Dallas Cowboys","#003594"],    DEN:["Denver Broncos","#FB4F14"],
-  DET:["Detroit Lions","#0076B6"],     GB:["Green Bay Packers","#203731"],
-  HOU:["Houston Texans","#03202F"],    IND:["Indianapolis Colts","#002C5F"],
-  JAX:["Jacksonville Jaguars","#006778"], KC:["Kansas City Chiefs","#E31837"],
-  LV:["Las Vegas Raiders","#5b5f63"],  LAC:["Los Angeles Chargers","#0080C6"],
-  LA:["Los Angeles Rams","#003594"],   LAR:["Los Angeles Rams","#003594"],
-  MIA:["Miami Dolphins","#008E97"],    MIN:["Minnesota Vikings","#4F2683"],
-  NE:["New England Patriots","#002244"], NO:["New Orleans Saints","#D3BC8D"],
-  NYG:["New York Giants","#0B2265"],   NYJ:["New York Jets","#125740"],
-  PHI:["Philadelphia Eagles","#004C54"], PIT:["Pittsburgh Steelers","#FFB612"],
-  SF:["San Francisco 49ers","#AA0000"], SEA:["Seattle Seahawks","#69BE28"],
-  TB:["Tampa Bay Buccaneers","#D50A0A"], TEN:["Tennessee Titans","#4B92DB"],
-  WAS:["Washington Commanders","#5A1414"], WSH:["Washington Commanders","#5A1414"]
-};
+const TEAMS = {{ teams | tojson }};
 function getTeam(a){ return TEAMS[a] || [a, "#888888"]; }
 
 // Injected server-side
@@ -305,7 +109,8 @@ function cardHTML(g){
     </div>`;
   }
 
-  return `<article class="card">
+  return `<a class="card" href="/matchup/${encodeURIComponent(g.id)}"
+             aria-label="${getTeam(g.away)[0]} at ${getTeam(g.home)[0]}: full matchup breakdown">
     <div class="card-top">
       <span class="kick">${g.kick} ET</span>
       <span class="tier ${tc}">${tl}</span>
@@ -320,7 +125,8 @@ function cardHTML(g){
       <span class="value"><b>${fav}</b> · ${favProb.toFixed(1)}% win prob</span>
     </div>
     ${resultHTML}
-  </article>`;
+    <div class="more">Full matchup →</div>
+  </a>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +193,8 @@ if(WEEK_META.length > 0){
       if(b.disabled) return;
       document.querySelectorAll(".week").forEach(x => x.classList.remove("active"));
       b.classList.add("active");
+      // Remember the week in the URL so "back" from a matchup page returns here
+      history.replaceState(null, "", week === ACTIVE_WEEK ? "/" : `/?week=${week}`);
 
       // Serve from cache if available
       if(_weekCache[week]){
@@ -423,8 +231,13 @@ if(WEEK_META.length > 0){
   }
 }
 
-// Initial render from server data
+// Initial render from server data, then jump to ?week=N if the URL asks for one
 renderPage(INIT_SLATES, INIT_LABEL);
+const requestedWeek = parseInt(new URLSearchParams(location.search).get("week"), 10);
+if(requestedWeek && requestedWeek !== ACTIVE_WEEK){
+  const tab = [...document.querySelectorAll(".week")].find(b => b.textContent === "Week " + requestedWeek);
+  if(tab && !tab.disabled) tab.click();
+}
 </script>
 </body>
 </html>

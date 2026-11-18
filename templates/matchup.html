@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% if m %}{{ m.away.team }} at {{ m.home.team }} · {% endif %}NFL Game Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header>
+  <div class="wrap topbar">
+    <a class="back display" href="/{% if m and m.week %}?week={{ m.week }}{% endif %}">← All games</a>
+    <div class="wordmark display">
+      <span class="title">NFL <em>Game</em> Predictor</span>
+      <span class="sub">MATCHUP</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+{% if error %}
+  <div class="notice">{{ error }}</div>
+{% else %}
+{% set away = m.away %}{% set home = m.home %}
+{% set away_c = m.away_color %}{% set home_c = m.home_color %}
+{% set home_pct = m.home_win_prob * 100 %}{% set away_pct = 100 - home_pct %}
+{% set pick_pct = home_pct if m.model_pick == home.team else away_pct %}
+
+  <!-- ===== Hero ===== -->
+  <section class="hero">
+    <div class="eyebrow">
+      {% if m.game_type and m.game_type != 'REG' %}Playoffs{% else %}Week {{ m.week }}{% endif %}
+      {% if m.div_game %} · Division game{% endif %}
+    </div>
+    <div class="hero-grid">
+      <div>
+        <h1 class="hero-matchup display">{{ away.team }}<span class="at">at</span>{{ home.team }}</h1>
+        <p class="hero-meta">{{ m.kick }} ET{% if m.stadium %} · <span class="mono">{{ m.stadium }}</span>{% endif %}</p>
+      </div>
+      <div class="hero-call">
+        <div class="pct mono">{{ "%.1f"|format(pick_pct) }}%</div>
+        <div class="who">Model picks <b>{{ team_info(m.model_pick)[0] }}</b></div>
+      </div>
+    </div>
+    <div class="hero-field">
+      {% set fav_c = home_c if m.model_pick == home.team else away_c %}
+      <div class="field lg" role="img" aria-label="{{ m.model_pick }} win probability {{ '%.1f'|format(pick_pct) }} percent">
+        <div class="fill" style="width:{{ pick_pct }}%;--team-c:{{ fav_c }}"></div>
+        <div class="gainline" style="left:{{ pick_pct }}%"></div>
+        <span class="tag left">{{ m.model_pick }} {{ "%.1f"|format(pick_pct) }}%</span>
+        <span class="tag right">{{ away.team if m.model_pick == home.team else home.team }} {{ "%.1f"|format(100 - pick_pct) }}%</span>
+      </div>
+    </div>
+    {% if m.final %}
+    <div class="final-banner">
+      <span class="mono">Final · {{ away.team }} {{ m.final.away_score }} · {{ home.team }} {{ m.final.home_score }}</span>
+      {% if m.final.correct is not none %}
+        <span class="badge {{ 'correct' if m.final.correct else 'wrong' }}">{{ '✓ Model correct' if m.final.correct else '✗ Model wrong' }}</span>
+      {% else %}<span class="badge">Tie</span>{% endif %}
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ===== Team cards ===== -->
+  <section class="m-section">
+    <div class="team-cards">
+    {% for t, side, c in [(away, 'Away', away_c), (home, 'Home', home_c)] %}
+      <article class="team-card" style="--team-c:{{ c }}">
+        <div class="tc-head">
+          <span class="tc-abbr display">{{ t.team }}</span>
+          <div>
+            <div class="tc-name">{{ team_info(t.team)[0] }}</div>
+            <div class="tc-side">{{ side }}</div>
+          </div>
+          <div class="tc-record mono">{{ t.record }}</div>
+        </div>
+        <dl class="tc-facts">
+          <div><dt>Streak</dt><dd class="mono">{{ t.streak or '—' }}</dd></div>
+          <div><dt>Home</dt><dd class="mono">{{ t.home_record }}</dd></div>
+          <div><dt>Away</dt><dd class="mono">{{ t.away_record }}</dd></div>
+          <div><dt>{{ m.season - 1 }}</dt><dd class="mono">{{ t.prior_record }}</dd></div>
+          <div><dt>QB</dt><dd>{{ t.qb or '—' }}</dd></div>
+          <div><dt>Coach</dt><dd>{{ t.coach or '—' }}</dd></div>
+        </dl>
+        <div class="form">
+          <span class="form-label">Last 5</span>
+          {% for g in t.form %}
+            <span class="form-chip {{ g.result|lower }}" title="{{ g.result }} {{ g.score }} {{ 'vs' if g.home else '@' }} {{ g.opp }}">
+              <b>{{ g.result }}</b><small>{{ 'vs' if g.home else '@' }} {{ g.opp }}</small><small class="mono">{{ g.score }}</small>
+            </span>
+          {% else %}
+            <span class="muted">No games yet this season</span>
+          {% endfor %}
+        </div>
+      </article>
+    {% endfor %}
+    </div>
+  </section>
+
+  <!-- ===== Edge board ===== -->
+  <section class="m-section">
+    <div class="slate-head">
+      <h2 class="display">Statistical edges</h2>
+      <span class="count">{{ m.season }} season, before kickoff</span>
+      <span class="rule"></span>
+    </div>
+
+    {% set ec = m.edge_count %}
+    <div class="edge-summary">
+      {% if ec.home != ec.away %}
+        {% set leader = home.team if ec.home > ec.away else away.team %}
+        <span class="edge-tally display" style="--team-c:{{ home_c if leader == home.team else away_c }}">{{ leader }}</span>
+        <span>leads <b class="mono">{{ [ec.home, ec.away]|max }}</b> of {{ m.rows|length }} categories
+          (<span class="mono">{{ away.team }} {{ ec.away }} · {{ home.team }} {{ ec.home }}</span>)</span>
+      {% else %}
+        <span>Even split — each team leads <b class="mono">{{ ec.home }}</b> of {{ m.rows|length }} categories</span>
+      {% endif %}
+    </div>
+
+    {% if m.key_edges %}
+    <ul class="key-edges">
+      {% for e in m.key_edges %}
+        <li style="--team-c:{{ home_c if e.team == home.team else away_c }}">
+          <span class="ke-team display">{{ e.team }}</span> {{ e.text }}
+        </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="compare">
+      <div class="compare-head">
+        <span class="display" style="color:{{ away_c }}">{{ away.team }}</span>
+        <span></span>
+        <span class="display" style="color:{{ home_c }}">{{ home.team }}</span>
+      </div>
+      {% for r in m.rows %}
+      <div class="compare-row">
+        <span class="cv mono {{ 'win' if r.edge == 'away' }}">{% if r.edge == 'away' %}▲ {% endif %}{{ r.away }}</span>
+        <div class="cmid">
+          <span class="clabel">{{ r.label }}</span>
+          <div class="tug" role="img" aria-label="{{ r.label }}: {{ away.team }} {{ r.away }}, {{ home.team }} {{ r.home }}">
+            <div class="tug-away" style="width:{{ r.away_share }}%;background:{{ away_c }}"></div>
+            <div class="tug-home" style="width:{{ 100 - r.away_share }}%;background:{{ home_c }}"></div>
+            <span class="tug-mid"></span>
+          </div>
+        </div>
+        <span class="cv mono home {{ 'win' if r.edge == 'home' }}">{{ r.home }}{% if r.edge == 'home' %} ▲{% endif %}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="footnote">Bars lean toward the team with the edge; a longer lean means a bigger gap. Strength of schedule = average win % of opponents faced. Against the spread = record vs the closing Vegas line.</p>
+  </section>
+
+  <!-- ===== Model vs Vegas + model inputs ===== -->
+  <section class="m-section two-col">
+    <div class="panel">
+      <h3 class="display">Model vs Vegas</h3>
+      <div class="vs-row">
+        <span class="vs-label">Model</span>
+        <div class="tug" role="img" aria-label="Model: {{ away.team }} {{ '%.0f'|format(away_pct) }}%, {{ home.team }} {{ '%.0f'|format(home_pct) }}%">
+          <div class="tug-away" style="width:{{ away_pct }}%;background:{{ away_c }}"></div>
+          <div class="tug-home" style="width:{{ home_pct }}%;background:{{ home_c }}"></div>
+          <span class="tug-mid"></span>
+        </div>
+        <span class="vs-val mono">{{ home.team }} {{ "%.0f"|format(home_pct) }}%</span>
+      </div>
+      {% if m.vegas_home_prob is not none %}
+      {% set v_home = m.vegas_home_prob * 100 %}
+      <div class="vs-row">
+        <span class="vs-label">Vegas</span>
+        <div class="tug" role="img" aria-label="Vegas: {{ away.team }} {{ '%.0f'|format(100 - v_home) }}%, {{ home.team }} {{ '%.0f'|format(v_home) }}%">
+          <div class="tug-away" style="width:{{ 100 - v_home }}%;background:{{ away_c }}"></div>
+          <div class="tug-home" style="width:{{ v_home }}%;background:{{ home_c }}"></div>
+          <span class="tug-mid"></span>
+        </div>
+        <span class="vs-val mono">{{ home.team }} {{ "%.0f"|format(v_home) }}%</span>
+      </div>
+      {% set gap = home_pct - v_home %}
+      <p class="vs-note">
+        {% if gap|abs < 3 %}The model and Vegas basically agree.
+        {% else %}The model is <b class="mono">{{ "%.0f"|format(gap|abs) }} pts</b> higher on <b>{{ home.team if gap > 0 else away.team }}</b> than the betting market.{% endif %}
+      </p>
+      {% else %}
+      <p class="vs-note muted">No betting line posted yet.</p>
+      {% endif %}
+      <dl class="mini-facts">
+        <div><dt>Spread</dt><dd class="mono">{{ m.spread_text or '—' }}</dd></div>
+        <div><dt>Over/under</dt><dd class="mono">{{ m.total_line if m.total_line is not none else '—' }}</dd></div>
+      </dl>
+    </div>
+
+    <div class="panel">
+      <h3 class="display">What the model sees</h3>
+      <p class="panel-sub">Blend of {{ m.season }} and {{ m.season - 1 }} form. This season's weight grows with each game played.</p>
+      <table class="inputs">
+        <thead><tr><th></th><th class="display" style="color:{{ away_c }}">{{ away.team }}</th><th class="display" style="color:{{ home_c }}">{{ home.team }}</th></tr></thead>
+        <tbody>
+          <tr><th>Points scored</th><td class="mono">{{ "%.1f"|format(away.model_ppg) }}</td><td class="mono">{{ "%.1f"|format(home.model_ppg) }}</td></tr>
+          <tr><th>Points allowed</th><td class="mono">{{ "%.1f"|format(away.model_papg) }}</td><td class="mono">{{ "%.1f"|format(home.model_papg) }}</td></tr>
+          <tr><th>Win rate</th><td class="mono">{{ "%.0f"|format(away.model_win_rate * 100) }}%</td><td class="mono">{{ "%.0f"|format(home.model_win_rate * 100) }}%</td></tr>
+          <tr><th>{{ m.season }} weight</th><td class="mono">{{ "%.0f"|format(away.current_weight * 100) }}%</td><td class="mono">{{ "%.0f"|format(home.current_weight * 100) }}%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== H2H + conditions ===== -->
+  <section class="m-section two-col">
+    <div class="panel">
+      <h3 class="display">Head to head</h3>
+      {% if m.h2h %}
+      <ul class="h2h">
+        {% for g in m.h2h %}
+        <li>
+          <span class="mono muted">{{ g.season }}{% if g.week %} · Wk {{ g.week }}{% endif %}</span>
+          <span>{{ g.matchup }}</span>
+          <span class="mono">{{ g.score }}</span>
+          {% if g.winner %}<span class="h2h-win display" style="--team-c:{{ away_c if g.winner == away.team else home_c }}">{{ g.winner }}</span>{% else %}<span class="muted">Tie</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No meetings since 2020.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h3 class="display">Game conditions</h3>
+      <dl class="mini-facts">
+        <div><dt>Stadium</dt><dd>{{ m.stadium or '—' }}</dd></div>
+        <div><dt>Roof</dt><dd>{{ (m.roof or '—')|capitalize }}</dd></div>
+        <div><dt>Surface</dt><dd>{{ m.surface or '—' }}</dd></div>
+        <div><dt>Rest</dt><dd class="mono">{{ away.team }} {{ away.rest if away.rest is not none else '—' }}d · {{ home.team }} {{ home.rest if home.rest is not none else '—' }}d</dd></div>
+        {% if m.temp is not none %}<div><dt>Temp</dt><dd class="mono">{{ m.temp }}°F</dd></div>{% endif %}
+        {% if m.wind is not none %}<div><dt>Wind</dt><dd class="mono">{{ m.wind }} mph</dd></div>{% endif %}
+      </dl>
+    </div>
+  </section>
+{% endif %}
+</main>
+
+<footer class="wrap">
+  <span>Win probabilities are model output, not betting advice.</span>
+  <span class="mono">Data: nflverse schedules &amp; closing lines</span>
+</footer>
+</body>
+</html>
