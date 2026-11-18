@@ -14,11 +14,15 @@ import pickle
 import os
 warnings.filterwarnings('ignore')
 
-try:
-    import nfl_data_py as nfl
-    NFL_DATA_PY_AVAILABLE = True
-except ImportError:
-    NFL_DATA_PY_AVAILABLE = False
+# nflverse's schedule + scores file (regular season and playoffs, 1999-present,
+# updated during the season). This is the same file nfl_data_py.import_schedules
+# downloaded; reading it directly avoids that package, which pins pandas < 2.
+SCHEDULE_URL = 'https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv'
+
+
+def fetch_schedule():
+    """Download the full NFL schedule (all seasons) as a DataFrame."""
+    return pd.read_csv(SCHEDULE_URL, low_memory=False)
 
 # How quickly the current season takes over from last season. The current
 # season's weight is n / (n + PRIOR_SEASON_GAMES), where n is games played this
@@ -127,27 +131,20 @@ def calculate_features_for_game(game, completed_games_df, date_col, window_size=
     return features
 
 def load_historical_games(seasons=None):
-    """Load historical NFL games from nfl_data_py.
-    Includes both regular season and postseason/playoff games."""
-    if not NFL_DATA_PY_AVAILABLE:
-        raise ImportError("nfl_data_py is required. Install with: pip install nfl-data-py")
-    
+    """Load completed NFL games (regular season and playoffs) from nflverse."""
     if seasons is None:
         current_year = datetime.now().year
         seasons = list(range(2020, current_year + 1))
-    
+
+    schedule = fetch_schedule()
     all_games = []
     for season in seasons:
-        try:
-            # nfl_data_py schedule includes regular season and postseason games
-            season_games = nfl.import_schedules([season])
-            if len(season_games) > 0:
-                all_games.append(season_games)
-            else:
-                print(f"Warning: no schedule data for season {season}")
-        except Exception as e:
-            print(f"Warning: could not load season {season}: {e}")
-    
+        season_games = schedule[schedule['season'] == season]
+        if len(season_games) > 0:
+            all_games.append(season_games)
+        else:
+            print(f"Warning: no schedule data for season {season}")
+
     if not all_games:
         raise ValueError("Could not load any game data")
     
@@ -176,9 +173,6 @@ def load_upcoming_games(season=None):
     """Load NFL games for predictions - includes current week games even if they've started.
     Includes both regular season and postseason/playoff games.
     Note: Playoff games for a season occur in January/February of the next year."""
-    if not NFL_DATA_PY_AVAILABLE:
-        raise ImportError("nfl_data_py is required. Install with: pip install nfl-data-py")
-    
     if season is None:
         current_date = datetime.now()
         current_month = current_date.month
@@ -196,15 +190,12 @@ def load_upcoming_games(season=None):
         seasons_to_load = [season]
     
     try:
+        schedule = fetch_schedule()
         all_games_list = []
         for season_to_load in seasons_to_load:
-            try:
-                season_games = nfl.import_schedules([season_to_load])
-                if len(season_games) > 0:
-                    all_games_list.append(season_games)
-            except Exception as e:
-                print(f"Warning: Could not load season {season_to_load}: {e}")
-                continue
+            season_games = schedule[schedule['season'] == season_to_load]
+            if len(season_games) > 0:
+                all_games_list.append(season_games)
         
         if not all_games_list:
             return pd.DataFrame(), None
